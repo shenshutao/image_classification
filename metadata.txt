@@ -1,0 +1,12 @@
+defect1
+defect10
+defect11
+defect2
+defect3
+defect4
+defect5
+defect6
+defect7
+defect8
+defect9
+norm

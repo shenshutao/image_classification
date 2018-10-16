@@ -26,7 +26,9 @@ def is_same_image(image_path1, image_path2):
 
 
 def merger_folder(merge_zip_list, target_folder_name):
-    os.makedirs(target_folder_name)
+    if not os.path.exists(target_folder_name):
+        os.makedirs(target_folder_name)
+
     for i, zip_file_path in enumerate(merge_zip_list):
         if zip_file_path.startswith('gs://'):
             local_zip_file_path = 'train_data' + str(i) + '.zip'
@@ -36,30 +38,32 @@ def merger_folder(merge_zip_list, target_folder_name):
             zip_file_path = local_zip_file_path
 
         util.extract_zipfile(zip_file_path, 'tmp_folder' + str(i))
-        merged_class_folder_list = os.listdir('folder_merged')
+        merged_class_folder_list = os.listdir(target_folder_name)
         class_folder_list = os.listdir('tmp_folder' + str(i))
+
         for class_folder in class_folder_list:
             if class_folder not in merged_class_folder_list:  # class folder not exist in merged folder
-                shutil.copytree(os.path.join('tmp_folder' + str(i), class_folder), os.path.join('folder_merged', class_folder))
+                shutil.copytree(os.path.join('tmp_folder' + str(i), class_folder),
+                                os.path.join(target_folder_name, class_folder))
             else:  # class folder is already inside the merged folder, do merge !
                 for image_name in os.listdir(os.path.join('tmp_folder' + str(i), class_folder)):
-                    if image_name not in os.listdir(os.path.join('folder_merged', class_folder)):
+                    if image_name not in os.listdir(os.path.join(target_folder_name, class_folder)):
                         shutil.copy(os.path.join('tmp_folder' + str(i), class_folder, image_name),
-                                        os.path.join('folder_merged', class_folder, image_name))
+                                    os.path.join(target_folder_name, class_folder, image_name))
                     else:
                         if is_same_image(os.path.join('tmp_folder' + str(i), class_folder, image_name),
-                                         os.path.join('folder_merged', class_folder, image_name)):
+                                         os.path.join(target_folder_name, class_folder, image_name)):
                             pass  # do not copy the image
                         else:
                             shutil.copy(os.path.join('tmp_folder' + str(i), class_folder, image_name),
-                                        os.path.join('folder_merged', class_folder, str(uuid.uuid4()) + image_name))
+                                        os.path.join(target_folder_name, class_folder, str(uuid.uuid4()) + image_name))
 
         shutil.rmtree('tmp_folder' + str(i))
 
 
-def get_data(input_path :str, output_folder):
+def get_data(input_path: str, output_folder):
     if input_path.startswith('Merged;'):
-        merge_list = li.replace('Merged;', '').split(',')
+        merge_list = input_path.replace('Merged;', '').split(',')
         merger_folder(merge_list, output_folder)
     elif input_path.startswith('gs://'):
         subprocess.check_call([
@@ -79,7 +83,7 @@ def get_data(input_path :str, output_folder):
 if __name__ == "__main__":
     # merge_list = ['aaa.zip', 'bbb.zip']
 
-    li = 'Merged;aaa.zip,bbb.zip'
+    li = 'Merged;C:/Users/AlphaCat/Desktop/test.zip,C:/Users/AlphaCat/Desktop/test2.zip'
     merge_list = li.replace('Merged;', '').split(',')
 
     merger_folder(merge_list, 'folder_merged')

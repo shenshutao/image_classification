@@ -2,7 +2,7 @@
 from setuptools import setup, find_packages
 
 REQUIRED_PACKAGES = [
-    'keras',
+    'keras>=2.2.4',
     'Pillow'
 ]
 

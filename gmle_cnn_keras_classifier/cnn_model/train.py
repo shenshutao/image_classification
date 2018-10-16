@@ -1,12 +1,13 @@
 # -*- coding=utf-8 -*-
-import os
-import sys
-
 import argparse
 import datetime
+import os
 import subprocess
-import tensorflow as tf
+import sys
+import traceback
+
 import pandas as pd
+import tensorflow as tf
 from keras import backend as K
 # from keras.applications.xception import Xception, preprocess_input
 # from keras.applications.nasnet import NASNetLarge, preprocess_input
@@ -19,8 +20,8 @@ from keras.models import Model
 from keras.optimizers import Adam
 from keras.preprocessing.image import ImageDataGenerator
 
-from cnn_model import util
 from cnn_model import dataset_download
+from cnn_model import util
 
 
 def main():
@@ -37,7 +38,7 @@ def main():
     param_batch_size = int(parsed_args['param_batch_size'])
     param_img_resize = int(parsed_args['param_img_resize'])
     param_learning_rate = float(parsed_args['param_learning_rate'])
-    param_validate_set_ratio = float(parsed_args['param_validate_set_ratio'])
+    param_validate_set_ratio = float(parsed_args['param_validate_set_ratio']) / 100.
     data_augmentation = dict(
         fill_mode='nearest'
     )
@@ -59,41 +60,46 @@ def main():
 
     print(data_augmentation)
 
-    print('======== Get Dataset =========')
-    dataset_download.get_data(input_path, 'data/train_data')
+    try:
+        print('======== Get Dataset =========')
+        dataset_download.get_data(input_path, 'data/train_data')
 
-    if not os.path.exists('output'):
-        os.makedirs('output')
+        if not os.path.exists('output'):
+            os.makedirs('output')
 
-    print('======== Upload metadata ========')
-    categories = os.listdir('data/train_data')
-    with open('output/metadata.txt', 'w') as meta_file:
-        meta_file.writelines(["%s\n" % item for item in categories])
+        print('======== Upload metadata ========')
+        categories = os.listdir('data/train_data')
+        with open('output/metadata.txt', 'w') as meta_file:
+            meta_file.writelines(["%s\n" % item for item in categories])
 
-    # upload to google bucket
-    if remote_output_dir.startswith('gs://'):
-        subprocess.check_call([
-            'gsutil', '-m', '-q', 'cp', 'output/metadata.txt', os.path.join(remote_output_dir, 'metadata.txt'),
-        ])
+        # upload to google bucket
+        if remote_output_dir.startswith('gs://'):
+            subprocess.check_call([
+                'gsutil', '-m', '-q', 'cp', 'output/metadata.txt', os.path.join(remote_output_dir, 'metadata.txt'),
+            ])
 
-    print('======== Split data into train / validate sets =========')
-    util.split_data('data/train_data', 'data/validate_data', param_validate_set_ratio)
+        print('======== Split data into train / validate sets =========')
+        util.split_data('data/train_data', 'data/validate_data', param_validate_set_ratio)
 
-    print('======== Train resNet Model !!! =========')
-    train_resnet(remote_output_dir, categories, 'data/train_data', 'data/validate_data', 'output/last_model.h5',
-                 data_augmentation, param_epoch, param_batch_size, param_img_resize, param_img_resize,
-                 param_learning_rate)
+        print('======== Train resNet Model !!! =========')
+        train_resnet(remote_output_dir, categories, 'data/train_data', 'data/validate_data', 'output/last_model.h5',
+                     data_augmentation, param_epoch, param_batch_size, param_img_resize, param_img_resize,
+                     param_learning_rate)
 
-    print('======== Convert H5 to SavedModel =========')
-    util.convert_h5_to_pb('output', 'last_model.h5')
+        print('======== Convert H5 to SavedModel =========')
+        util.convert_h5_to_pb('output', 'last_model.h5')
 
-    print('======== Upload model to destination =======')
-    if remote_output_dir.startswith('gs://'):
-        subprocess.check_call([
-            'gsutil', '-m', '-q', 'cp', '-r', 'output/*', remote_output_dir
-        ])
+        print('======== Upload model to destination =======')
+        if remote_output_dir.startswith('gs://'):
+            subprocess.check_call([
+                'gsutil', '-m', '-q', 'cp', '-r', 'output/*', remote_output_dir
+            ])
 
-    print('======== Job finished =======')
+        print('======== Job finished =======')
+    except Exception as e:
+        print('Exception occurs: ')
+        traceback.print_exc()
+        raise
 
 
 def default_args(argv):
@@ -108,7 +114,7 @@ def default_args(argv):
     parser.add_argument('--param_epoch', type=str, default='50', help='Deep learning epoch No.')
     parser.add_argument('--param_batch_size', type=str, default='16', help='Deep learning batch size.')
     parser.add_argument('--param_img_resize', type=str, default='299', help='Resize image to this pixel * pixel.')
-    parser.add_argument('--param_validate_set_ratio', type=str, default='0.3', help='Deep learning validate set ratio')
+    parser.add_argument('--param_validate_set_ratio', type=str, default='30', help='Deep learning validate set ratio')
     parser.add_argument('--param_learning_rate', type=str, default='0.0001', help='Augmentation learning rate.')
 
     parser.add_argument('--augmentation_rotation_range', type=str, default=None, help='Augmentation rotation range.')
@@ -126,7 +132,6 @@ def default_args(argv):
 def train_resnet(remote_output_dir, categories, train_data_dir, validate_data_dir, last_model_file_name,
                  data_augmentation, param_epoch=50, param_batch_size=32, img_width=299, img_height=299,
                  param_learning_rate=0.0001):
-
     categorie_size = len(categories)
 
     ####################

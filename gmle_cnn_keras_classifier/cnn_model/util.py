@@ -46,15 +46,17 @@ def extract_zipfile(zip_file, target_folder):
     Extract zip file and remove system files
     '''
     zip_ref = zipfile.ZipFile(zip_file, 'r')
-    zip_ref.extractall('zip_temp')
+    zip_ref.extractall(target_folder)
     zip_ref.close()
 
-    folders = os.listdir('zip_temp')
+    folders = os.listdir(target_folder)
     for fold in folders:
         if fold == '__MACOSX' or fold.startswith('.'):
-            shutil.rmtree(os.path.join('zip_temp', fold))
-        else:
-            shutil.move(os.path.join('zip_temp', fold), target_folder)
+            shutil.rmtree(os.path.join(target_folder, fold))
+
+    for arg, dirnam, names in os.walk(target_folder):
+        if '.DS_Store' in names:
+            os.remove(os.path.join(arg, '.DS_Store'))
 
 
 def split_data(train_data_dir, validate_data_dir, validate_precentage: float):
@@ -89,4 +91,5 @@ if __name__ == "__main__":
     # save_model_to_pb('ep012-loss100.753-val_loss90.289.h5', '.', 'yolov3')
     # split_data('train_data', 'validate_data', 0.2)
 
-    convert_h5_to_pb('C:/Users/AlphaCat/Desktop/models/gmle_cnn_keras_classifier_resnet50/cnn_model/output', 'model_50_0.08.h5')
+    convert_h5_to_pb('C:/Users/AlphaCat/Desktop/models/gmle_cnn_keras_classifier_resnet50/cnn_model/output',
+                     'model_50_0.08.h5')

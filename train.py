@@ -3,27 +3,20 @@ import os
 
 import numpy as np
 import tensorflow as tf  # only work from tensorflow==1.9.0-rc1 and after
-from tensorflow.keras.applications.densenet import DenseNet169, preprocess_input
+from tensorflow.keras.applications.xception import Xception, preprocess_input
 from tensorflow.keras.callbacks import *
 from tensorflow.keras.layers import GlobalAveragePooling2D, Dense, Dropout
 from tensorflow.keras.optimizers import SGD
-from skimage.util import random_noise
-import cv2
-from tensorflow.python.summary import summary as tf_summary
 
 _EPOCHS = 80
-_BATCH_SIZE = 4
+_BATCH_SIZE = 32
 _IMAGE_SIZE = (512, 512)
-_NUM_CLASS = 12
+_CLASSES = ['dog', 'cat']
+_NUM_CLASS = len(_CLASSES)
 
-_CLASSES = ['norm', 'defect1', 'defect2', 'defect3', 'defect4', 'defect5', 'defect6', 'defect7', 'defect8', 'defect9',
-            'defect10', 'defect11']
-
-
-# tf.enable_eager_execution()
 
 def main(_):
-    train_tfdata, train_no = tfdata_from_dir('D:/Datasets/GuangDong/train', classes=_CLASSES)
+    train_tfdata, train_no = tfdata_from_dir('dogcat', classes=_CLASSES)
     print('{} images founded'.format(train_no))
     #    test_tfdata, test_no = tfdata_from_dir('D:/Datasets/GuangDong/train_try')
     #
@@ -42,7 +35,7 @@ def main(_):
     model = keras_model()  # your keras model here
     model.summary()
 
-    tensor_board = TensorBoard(log_dir='log', histogram_freq=0, write_graph=True, write_grads=True, write_images=True)
+    tensor_board = TensorBoard(log_dir='log', histogram_freq=None, write_graph=True, write_grads=True, write_images=True)
     save_every_5 = ModelCheckpoint(filepath='output/model_{epoch:02d}_{loss:.2f}.h5', verbose=1, save_best_only=False,
                                    save_weights_only=False, mode='auto', period=5)
     learning_rate_reduction = ReduceLROnPlateau(monitor='loss', patience=2, verbose=1, factor=0.5, min_lr=0.00001)
@@ -105,10 +98,10 @@ def get_img_dataset(img_list_x, label_list_y, num_class, aug=True):
         # 随机裁剪
         size = _IMAGE_SIZE[0]
         s = np.random.randint(0, x.shape[1] - size)
-        x = x[s:s + size, s:s + size]
+        x = x[:, s:s + size, s:s + size]
 
-        # 随机噪声
-        print(type(x))
+        # # 随机噪声
+        # print(type(x))
         # x = random_noise(x, mode='gaussian', clip=True) * 255
         # img = tf.keras.preprocessing.image.array_to_img(x[0])
         # img.save('aug.jpg')
@@ -123,20 +116,22 @@ def get_img_dataset(img_list_x, label_list_y, num_class, aug=True):
         return x, y
 
     dataset = tf.data.Dataset.from_tensor_slices((img_list_x, label_list_y))
-    dataset = dataset.shuffle(1000)
-    dataset = dataset.map(lambda x, y: _parse_function(x, y, [_IMAGE_SIZE[0] + 20, _IMAGE_SIZE[1] + 20]))
+    dataset = dataset.apply(tf.contrib.data.shuffle_and_repeat(1000, _EPOCHS))
+    dataset = dataset.apply(
+        tf.contrib.data.map_and_batch(lambda x, y: _parse_function(x, y, [_IMAGE_SIZE[0] + 20, _IMAGE_SIZE[1] + 20]),
+                                      _BATCH_SIZE))
+
     if aug:
         dataset = dataset.map(lambda x, y: augment(x, y))
     dataset = dataset.map(lambda x, y: preprocess(x, y))
-    dataset = dataset.repeat(_EPOCHS)
-    dataset = dataset.batch(_BATCH_SIZE)
+    dataset = dataset.prefetch(1)
 
     return dataset
 
 
 def keras_model():
     # don't include the top (final FC) layers.
-    base_model = DenseNet169(weights='imagenet', include_top=False, input_shape=(_IMAGE_SIZE + (3,)))
+    base_model = Xception(weights='imagenet', include_top=False, input_shape=(_IMAGE_SIZE + (3,)))
 
     # add FC layers.
     x = base_model.output

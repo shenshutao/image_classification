@@ -3,14 +3,16 @@ import os
 
 import numpy as np
 import tensorflow as tf  # only work from tensorflow==1.9.0-rc1 and after
-from tensorflow.keras.applications.xception import Xception, preprocess_input
+from tensorflow.keras.applications.vgg16 import VGG16, preprocess_input
 from tensorflow.keras.callbacks import *
 from tensorflow.keras.layers import GlobalAveragePooling2D, Dense, Dropout
 from tensorflow.keras.optimizers import SGD
+from custom_callbacks import CustomTensorBoard
+from custom_loss import *
 
 _EPOCHS = 80
-_BATCH_SIZE = 32
-_IMAGE_SIZE = (512, 512)
+_BATCH_SIZE = 16
+_IMAGE_SIZE = (224, 224)
 _CLASSES = ['dog', 'cat']
 _NUM_CLASS = len(_CLASSES)
 
@@ -18,7 +20,7 @@ _NUM_CLASS = len(_CLASSES)
 def main(_):
     train_tfdata, train_no = tfdata_from_dir('dogcat', classes=_CLASSES)
     print('{} images founded'.format(train_no))
-    #    test_tfdata, test_no = tfdata_from_dir('D:/Datasets/GuangDong/train_try')
+    test_tfdata, test_no = tfdata_from_dir('dogcat', classes=_CLASSES)
     #
     # iterator = train_tfdata.make_one_shot_iterator()
     # next_element = iterator.get_next()
@@ -35,18 +37,18 @@ def main(_):
     model = keras_model()  # your keras model here
     model.summary()
 
-    tensor_board = TensorBoard(log_dir='log', histogram_freq=None, write_graph=True, write_grads=True, write_images=True)
+    tensor_board = CustomTensorBoard(log_dir='log', histogram_freq=1, write_graph=True, write_grads=False, write_images=False, write_input=True, max_result_display=3)
     save_every_5 = ModelCheckpoint(filepath='output/model_{epoch:02d}_{loss:.2f}.h5', verbose=1, save_best_only=False,
                                    save_weights_only=False, mode='auto', period=5)
     learning_rate_reduction = ReduceLROnPlateau(monitor='loss', patience=2, verbose=1, factor=0.5, min_lr=0.00001)
 
-    model.compile(SGD(lr=0.001, momentum=0.9), focal_loss_category(), metrics=['acc'])
+    model.compile('adam', categorical_focal_loss(), metrics=['acc'])
     model.fit(
         train_tfdata.make_one_shot_iterator(),
         steps_per_epoch=int(train_no / _BATCH_SIZE),
         epochs=_EPOCHS,
-        #   validation_data=test_tfdata.make_one_shot_iterator(),
-        #  validation_steps=int(test_no / _BATCH_SIZE),
+        validation_data=test_tfdata.make_one_shot_iterator(),
+        validation_steps=1,
         callbacks=[tensor_board, learning_rate_reduction, save_every_5],
         class_weight='auto',
         verbose=1)
@@ -131,7 +133,7 @@ def get_img_dataset(img_list_x, label_list_y, num_class, aug=True):
 
 def keras_model():
     # don't include the top (final FC) layers.
-    base_model = Xception(weights='imagenet', include_top=False, input_shape=(_IMAGE_SIZE + (3,)))
+    base_model = VGG16(weights='imagenet', include_top=False, input_shape=(_IMAGE_SIZE + (3,)))
 
     # add FC layers.
     x = base_model.output
@@ -142,13 +144,6 @@ def keras_model():
     # this is the final model we will train
     model = tf.keras.Model(inputs=base_model.input, outputs=predictions)
     return model
-
-
-def focal_loss_category(gamma=2.):
-    def focal_loss(y_true, y_pred):
-        return - tf.reduce_sum(y_true * ((1 - y_pred) ** gamma) * tf.log(y_pred), axis=1)
-
-    return focal_loss
 
 
 if __name__ == '__main__':
